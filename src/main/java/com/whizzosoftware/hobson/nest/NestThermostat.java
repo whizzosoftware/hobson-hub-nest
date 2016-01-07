@@ -15,11 +15,10 @@ import com.whizzosoftware.hobson.api.property.TypedProperty;
 import com.whizzosoftware.hobson.api.variable.HobsonVariable;
 import com.whizzosoftware.hobson.api.variable.VariableConstants;
 import com.whizzosoftware.hobson.api.variable.VariableUpdate;
-import com.whizzosoftware.hobson.nest.api.dto.Shared;
+import com.whizzosoftware.hobson.nest.dto.Shared;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -71,38 +70,26 @@ public class NestThermostat extends AbstractHobsonDevice {
     }
 
     public void onSetVariable(String name, Object value) {
-        try {
-            if (VariableConstants.TARGET_TEMP_C.equals(name)) {
-                Double f = getEventAsDouble(value);
-                if (f != null) {
-                    // send the update to Nest
-                    nestPlugin.getApi().setTargetTemperature(
-                        nestPlugin.getLoginContext(),
-                        getContext().getDeviceId(),
-                        f
-                    );
-                    // TODO: we should probably do a status update instead
-                    fireVariableUpdateNotification(name, value);
-                } else {
-                    logger.error("Attempt to set temperature with no float value: {}", value);
-                }
-            } else if (VariableConstants.TARGET_TEMP_F.equals(name)) {
-                Double f = getEventAsDouble(value);
-                if (f != null) {
-                    // send the update to Nest
-                    nestPlugin.getApi().setTargetTemperature(
-                        nestPlugin.getLoginContext(),
-                        getContext().getDeviceId(),
-                        convertFahrenheitToCelsius(f)
-                    );
-                    // TODO: we should probably do a status update instead
-                    fireVariableUpdateNotification(name, value);
-                } else {
-                    logger.error("Attempt to set temperature with no float value: {}", value);
-                }
+        if (VariableConstants.TARGET_TEMP_C.equals(name)) {
+            Double f = getEventAsDouble(value);
+            if (f != null) {
+                // send the update to Nest
+                nestPlugin.sendSetTargetTemperatureRequest(getContext().getDeviceId(), f);
+                // TODO: we should probably do a status update instead
+                fireVariableUpdateNotification(name, value);
+            } else {
+                logger.error("Attempt to set temperature with no float value: {}", value);
             }
-        } catch (IOException e) {
-            logger.error("Error setting variable", e);
+        } else if (VariableConstants.TARGET_TEMP_F.equals(name)) {
+            Double f = getEventAsDouble(value);
+            if (f != null) {
+                // send the update to Nest
+                nestPlugin.sendSetTargetTemperatureRequest(getContext().getDeviceId(), convertFahrenheitToCelsius(f));
+                // TODO: we should probably do a status update instead
+                fireVariableUpdateNotification(name, value);
+            } else {
+                logger.error("Attempt to set temperature with no float value: {}", value);
+            }
         }
     }
 

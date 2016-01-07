@@ -10,28 +10,34 @@ package com.whizzosoftware.hobson.nest;
 import com.whizzosoftware.hobson.api.device.DeviceContext;
 import com.whizzosoftware.hobson.api.device.DeviceNotFoundException;
 import com.whizzosoftware.hobson.api.device.HobsonDevice;
-import com.whizzosoftware.hobson.api.plugin.AbstractHobsonPlugin;
 import com.whizzosoftware.hobson.api.plugin.PluginStatus;
+import com.whizzosoftware.hobson.api.plugin.http.AbstractHttpClientPlugin;
 import com.whizzosoftware.hobson.api.property.PropertyContainer;
 import com.whizzosoftware.hobson.api.property.TypedProperty;
-import com.whizzosoftware.hobson.nest.api.NestApi;
-import com.whizzosoftware.hobson.nest.api.NestLoginContext;
-import com.whizzosoftware.hobson.nest.api.dto.*;
+import com.whizzosoftware.hobson.nest.dto.*;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * The Hobson driver that creates and updated devices via the Nest API.
  *
  * @author Dan Noguerol
  */
-public class NestPlugin extends AbstractHobsonPlugin {
+public class NestPlugin extends AbstractHttpClientPlugin {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
-    private NestApi nestApi;
-    private NestLoginContext nestContext;
+    private static final String USER_AGENT = "Nest/3.0.1.15 (iOS) os=6.0 platform=iPad3,1";
+
+    private LoginContext nestContext;
 
     public NestPlugin(String pluginId) {
         super(pluginId);
@@ -41,21 +47,11 @@ public class NestPlugin extends AbstractHobsonPlugin {
         return "Nest";
     }
 
-    public NestApi getApi() {
-        return nestApi;
-    }
-
-    public NestLoginContext getLoginContext() {
-        return nestContext;
-    }
-
     public void onStartup(PropertyContainer config) {
         onPluginConfigurationUpdate(config);
     }
 
-    public void onShutdown() {
-
-    }
+    public void onShutdown() {}
 
     @Override
     public long getRefreshInterval() {
@@ -63,83 +59,131 @@ public class NestPlugin extends AbstractHobsonPlugin {
     }
 
     public void onPluginConfigurationUpdate(PropertyContainer config) {
-        try {
-            // get the username and password from configuration
-            String username = (String)config.getPropertyValue("username");
-            String password = (String)config.getPropertyValue("password");
+        // get the username and password from configuration
+        String username = (String)config.getPropertyValue("username");
+        String password = (String)config.getPropertyValue("password");
 
-            // if they've been set, initialize the API object
-            if (username != null && password != null) {
-                logger.debug("Initializing Nest API with user: {}", username);
-                nestApi = new NestApi(username, password);
-                logger.debug("Performing Nest login");
-                nestContext = nestApi.login();
-                logger.debug("Nest login successful; transport URL is {}", nestContext.getTransportUrl());
-
-                setStatus(PluginStatus.running());
-
-                onRefresh();
-            } else {
-                logger.debug("Nest username and password are not set");
-                setStatus(PluginStatus.notConfigured("Nest username and password are not set"));
-            }
-        } catch (IOException e) {
-            logger.error("An error occurred starting the Nest plugin", e);
-            setStatus(PluginStatus.failed(e.getLocalizedMessage()));
-            nestApi = null;
+        // if they've been set, initialize the API object
+        if (username != null && password != null) {
+            sendLoginRequest(username, password);
+        } else {
+            logger.debug("Nest username and password are not set");
+            setStatus(PluginStatus.notConfigured("Nest username and password are not set"));
         }
     }
 
     @Override
     public void onRefresh() {
-        if (nestApi != null) {
+        if (nestContext != null) {
             logger.debug("Refreshing Nest status");
+            sendStatusRequest();
+        }
+    }
 
-            try {
-                Status status = nestApi.getStatus(nestContext);
-                if (status.getStructureCount() > 0) {
-                    if (status.getStructureCount() == 1) {
-                        Structure structure = (Structure) status.getStructures().toArray()[0];
-                        String[] devices = structure.getDevices();
-                        for (String deviceId : devices) {
-                            if (deviceId.startsWith("device.")) {
-                                deviceId = deviceId.substring(7);
-                            }
-                            Shared sharedDTO = status.getShared(deviceId);
-                            if (sharedDTO != null) {
-                                try {
-                                    try {
-                                        HobsonDevice device = getDevice(DeviceContext.create(getContext(), deviceId));
-                                        logger.debug("Updating state of device: " + deviceId);
-                                        if (device instanceof NestThermostat) {
-                                            ((NestThermostat)device).updateStatus(sharedDTO);
-                                        } else {
-                                            logger.error("Status update expected device {} to be a thermostat but was: {}", deviceId, device);
-                                        }
-                                    } catch (DeviceNotFoundException dnfe) {
-                                        logger.debug("Creating Nest device: " + deviceId);
-                                        NestThermostat nt = new NestThermostat(this, deviceId, sharedDTO, this);
-                                        publishDevice(nt);
-                                    }
-                                } catch (Exception e) {
-                                    logger.error("Error updating device with ID: " + deviceId, e);
+    private void sendLoginRequest(String username, String password) {
+        try {
+            URI uri = new URI("https://home.nest.com/user/login");
+
+            logger.debug("Sending login request using for user {} with URI: {}", username, uri);
+
+            String entity = "username=" + URLEncoder.encode(username, "UTF8") + "&password=" + URLEncoder.encode(password, "UTF8");
+            logger.trace("POST data: {}", entity);
+
+            sendHttpPostRequest(
+                uri,
+                null,
+                entity.getBytes(),
+                "login"
+            );
+        } catch (Exception e) {
+            logger.error("Error sending login request", e);
+        }
+    }
+
+    private void sendStatusRequest() {
+        try {
+            URI uri = new URI(nestContext.getTransportUrl() + "/v2/mobile/" + nestContext.getUser());
+
+            logger.debug("Sending status request using URI: {}", uri);
+
+            Map<String,String> headers = new HashMap<>();
+            headers.put("Authorization", "Basic " + nestContext.getAccessToken());
+            headers.put("Accept", "*/*");
+            headers.put("Accept-Encoding", "gzip, deflate");
+            headers.put("Accept-Language", "en-us");
+            headers.put("X-nl-protocol-version", "1");
+            headers.put("X-nl-user-id", nestContext.getUser());
+            headers.put("user-agent", USER_AGENT);
+
+            sendHttpGetRequest(
+                uri,
+                headers,
+                "status"
+            );
+        } catch (URISyntaxException e) {
+            logger.error("Error sending status request", e);
+        }
+    }
+
+    public void sendSetTargetTemperatureRequest(String deviceId, Double t) {
+        try {
+            URI uri = new URI(nestContext.getTransportUrl() + "/v2/put/shared." + deviceId);
+
+            logger.debug("Setting target temperature using URI: {}", uri);
+
+            Map<String,String> headers = new HashMap<>();
+            headers.put("user-agent", USER_AGENT);
+            headers.put("Content-Type", "application/json");
+            headers.put("Authorization", "Basic " + nestContext.getAccessToken());
+
+            String entity = "{\"target_change_pending\":true,\"target_temperature\":" + t + "}";
+            logger.trace("POST data: {}", entity);
+
+            sendHttpPostRequest(uri, headers, entity.getBytes(), "setTemp");
+        } catch (URISyntaxException e) {
+            logger.error("Error sending setTemp request", e);
+        }
+    }
+
+    private void processStatus(Status status) {
+        if (status.getStructureCount() > 0) {
+            if (status.getStructureCount() == 1) {
+                Structure structure = (Structure) status.getStructures().toArray()[0];
+                String[] devices = structure.getDevices();
+                for (String deviceId : devices) {
+                    if (deviceId.startsWith("device.")) {
+                        deviceId = deviceId.substring(7);
+                    }
+                    Shared sharedDTO = status.getShared(deviceId);
+                    if (sharedDTO != null) {
+                        try {
+                            try {
+                                HobsonDevice device = getDevice(DeviceContext.create(getContext(), deviceId));
+                                logger.debug("Updating state of device: " + deviceId);
+                                if (device instanceof NestThermostat) {
+                                    ((NestThermostat)device).updateStatus(sharedDTO);
+                                } else {
+                                    logger.error("Status update expected device {} to be a thermostat but was: {}", deviceId, device);
                                 }
-                            } else {
-                                logger.error("Structure defines a device ID that doesn't have a shared record");
+                            } catch (DeviceNotFoundException dnfe) {
+                                logger.debug("Creating Nest device: " + deviceId);
+                                NestThermostat nt = new NestThermostat(this, deviceId, sharedDTO, this);
+                                publishDevice(nt);
                             }
+                        } catch (Exception e) {
+                            logger.error("Error updating device with ID: " + deviceId, e);
                         }
                     } else {
-                        logger.error("Only one Nest structure is supported by this plugin");
-                        setStatus(PluginStatus.failed("Only one structure is supported by this plugin"));
+                        logger.error("Structure defines a device ID that doesn't have a shared record");
                     }
-                } else {
-                    logger.error("No Nest structure has been defined");
-                    setStatus(PluginStatus.failed("No Nest structure has been defined"));
                 }
-            } catch (IOException e) {
-                logger.error("Error reading Nest status information", e);
-                setStatus(PluginStatus.failed(e.getLocalizedMessage()));
+            } else {
+                logger.error("Only one Nest structure is supported by this plugin");
+                setStatus(PluginStatus.failed("Only one structure is supported by this plugin"));
             }
+        } else {
+            logger.error("No Nest structure has been defined");
+            setStatus(PluginStatus.failed("No Nest structure has been defined"));
         }
     }
 
@@ -149,5 +193,32 @@ public class NestPlugin extends AbstractHobsonPlugin {
             new TypedProperty.Builder("username", "User name", "Your Nest user name (same as web site)", TypedProperty.Type.STRING).build(),
             new TypedProperty.Builder("password", "Password", "Your Nest password (same as web site)", TypedProperty.Type.SECURE_STRING).build()
         };
+    }
+
+    @Override
+    protected void onHttpResponse(int statusCode, List<Map.Entry<String, String>> headers, String response, Object context) {
+        if ("login".equals(context)) {
+            JSONObject json = new JSONObject(new JSONTokener(response));
+            logger.debug("Login response received: {}", statusCode);
+            logger.trace(response);
+            nestContext = new LoginContext(json);
+            logger.debug("Login context received: {}", nestContext);
+            setStatus(PluginStatus.running());
+            sendStatusRequest();
+        } else if ("status".equals(context)) {
+            JSONObject json = new JSONObject(new JSONTokener(response));
+            logger.debug("Status response received: {}", statusCode);
+            logger.trace(response);
+            Status status = new Status(json);
+            processStatus(status);
+        } else {
+            logger.debug("Response {} received: {}", context, statusCode);
+            logger.trace(response);
+        }
+    }
+
+    @Override
+    protected void onHttpRequestFailure(Throwable cause, Object context) {
+        logger.error("HTTP request failed", cause);
     }
 }

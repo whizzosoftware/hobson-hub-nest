@@ -5,22 +5,25 @@
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *******************************************************************************/
-package com.whizzosoftware.hobson.nest.api;
+package com.whizzosoftware.hobson.nest.dto;
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.json.JSONObject;
 
 /**
  * Class that encapsulates information about a specific login.
  *
  * @author Dan Noguerol
  */
-public class NestLoginContext {
+public class LoginContext {
     private String user;
     private String transportUrl;
     private String accessToken;
 
-    public NestLoginContext(String user, String transportUrl, String accessToken) {
-        this.user = user;
-        this.transportUrl = transportUrl;
-        this.accessToken = accessToken;
+    public LoginContext(JSONObject json) {
+        this.user = json.getString("user");
+        this.transportUrl = json.getJSONObject("urls").getString("transport_url");
+        this.accessToken = json.getString("access_token");
     }
 
     /**
@@ -48,5 +51,9 @@ public class NestLoginContext {
      */
     public String getAccessToken() {
         return accessToken;
+    }
+
+    public String toString() {
+        return new ToStringBuilder(this).append("user", user).append("transportUrl", transportUrl).append("accessToken", accessToken).toString();
     }
 }
