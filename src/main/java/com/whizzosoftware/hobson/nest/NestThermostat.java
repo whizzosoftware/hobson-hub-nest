@@ -14,6 +14,7 @@ import com.whizzosoftware.hobson.api.property.PropertyContainer;
 import com.whizzosoftware.hobson.api.property.TypedProperty;
 import com.whizzosoftware.hobson.api.variable.HobsonVariable;
 import com.whizzosoftware.hobson.api.variable.VariableConstants;
+import com.whizzosoftware.hobson.api.variable.VariableContext;
 import com.whizzosoftware.hobson.api.variable.VariableUpdate;
 import com.whizzosoftware.hobson.nest.dto.Shared;
 import org.slf4j.Logger;
@@ -103,10 +104,10 @@ public class NestThermostat extends AbstractHobsonDevice {
         Double targetTempC = shared.getTargetTemperature();
 
         List<VariableUpdate> updates = new ArrayList<VariableUpdate>();
-        updates.add(new VariableUpdate(getContext(), VariableConstants.INDOOR_TEMP_C, currentTempC));
-        updates.add(new VariableUpdate(getContext(), VariableConstants.INDOOR_TEMP_F, convertCelsiusToFahrenheit(currentTempC)));
-        updates.add(new VariableUpdate(getContext(), VariableConstants.TARGET_TEMP_C, targetTempC));
-        updates.add(new VariableUpdate(getContext(), VariableConstants.TARGET_TEMP_F, convertCelsiusToFahrenheit(targetTempC)));
+        updates.add(new VariableUpdate(VariableContext.create(getContext(), VariableConstants.INDOOR_TEMP_C), currentTempC));
+        updates.add(new VariableUpdate(VariableContext.create(getContext(), VariableConstants.INDOOR_TEMP_F), convertCelsiusToFahrenheit(currentTempC)));
+        updates.add(new VariableUpdate(VariableContext.create(getContext(), VariableConstants.TARGET_TEMP_C), targetTempC));
+        updates.add(new VariableUpdate(VariableContext.create(getContext(), VariableConstants.TARGET_TEMP_F), convertCelsiusToFahrenheit(targetTempC)));
         fireVariableUpdateNotifications(updates);
 
         setDeviceAvailability(true, System.currentTimeMillis());
