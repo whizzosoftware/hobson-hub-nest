@@ -46,10 +46,11 @@ public class NestThermostat extends AbstractHobsonDevice {
         Double currentTempC = initialData.getCurrentTemperature();
         Double targetTempC = initialData.getTargetTemperature();
 
-        publishVariable(VariableConstants.INDOOR_TEMP_C, currentTempC, HobsonVariable.Mask.READ_ONLY);
-        publishVariable(VariableConstants.INDOOR_TEMP_F, convertCelsiusToFahrenheit(currentTempC), HobsonVariable.Mask.READ_ONLY);
-        publishVariable(VariableConstants.TARGET_TEMP_C, targetTempC, HobsonVariable.Mask.READ_WRITE);
-        publishVariable(VariableConstants.TARGET_TEMP_F, convertCelsiusToFahrenheit(targetTempC), HobsonVariable.Mask.READ_WRITE);
+        long now = System.currentTimeMillis();
+        publishVariable(VariableConstants.INDOOR_TEMP_C, currentTempC, HobsonVariable.Mask.READ_ONLY, now);
+        publishVariable(VariableConstants.INDOOR_TEMP_F, convertCelsiusToFahrenheit(currentTempC), HobsonVariable.Mask.READ_ONLY, now);
+        publishVariable(VariableConstants.TARGET_TEMP_C, targetTempC, HobsonVariable.Mask.READ_WRITE, now);
+        publishVariable(VariableConstants.TARGET_TEMP_F, convertCelsiusToFahrenheit(targetTempC), HobsonVariable.Mask.READ_WRITE, now);
     }
 
     @Override
