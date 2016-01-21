@@ -43,6 +43,8 @@ public class NestThermostat extends AbstractHobsonDevice {
 
     @Override
     public void onStartup(PropertyContainer config) {
+        super.onStartup(config);
+
         Double currentTempC = initialData.getCurrentTemperature();
         Double targetTempC = initialData.getTargetTemperature();
 
