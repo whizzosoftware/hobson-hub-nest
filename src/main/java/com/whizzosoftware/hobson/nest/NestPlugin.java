@@ -12,6 +12,8 @@ import com.whizzosoftware.hobson.api.device.DeviceNotFoundException;
 import com.whizzosoftware.hobson.api.device.HobsonDevice;
 import com.whizzosoftware.hobson.api.plugin.PluginStatus;
 import com.whizzosoftware.hobson.api.plugin.http.AbstractHttpClientPlugin;
+import com.whizzosoftware.hobson.api.plugin.http.HttpRequest;
+import com.whizzosoftware.hobson.api.plugin.http.HttpResponse;
 import com.whizzosoftware.hobson.api.property.PropertyContainer;
 import com.whizzosoftware.hobson.api.property.TypedProperty;
 import com.whizzosoftware.hobson.nest.dto.*;
@@ -20,11 +22,11 @@ import org.json.JSONTokener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -89,8 +91,10 @@ public class NestPlugin extends AbstractHttpClientPlugin {
             String entity = "username=" + URLEncoder.encode(username, "UTF8") + "&password=" + URLEncoder.encode(password, "UTF8");
             logger.trace("POST data: {}", entity);
 
-            sendHttpPostRequest(
+            sendHttpRequest(
                 uri,
+                HttpRequest.Method.POST,
+                null,
                 null,
                 entity.getBytes(),
                 "login"
@@ -115,8 +119,9 @@ public class NestPlugin extends AbstractHttpClientPlugin {
             headers.put("X-nl-user-id", nestContext.getUser());
             headers.put("user-agent", USER_AGENT);
 
-            sendHttpGetRequest(
+            sendHttpRequest(
                 uri,
+                HttpRequest.Method.GET,
                 headers,
                 "status"
             );
@@ -139,7 +144,14 @@ public class NestPlugin extends AbstractHttpClientPlugin {
             String entity = "{\"target_change_pending\":true,\"target_temperature\":" + t + "}";
             logger.trace("POST data: {}", entity);
 
-            sendHttpPostRequest(uri, headers, entity.getBytes(), "setTemp");
+            sendHttpRequest(
+                uri,
+                HttpRequest.Method.POST,
+                headers,
+                null,
+                entity.getBytes(),
+                "setTemp"
+            );
         } catch (URISyntaxException e) {
             logger.error("Error sending setTemp request", e);
         }
@@ -196,29 +208,35 @@ public class NestPlugin extends AbstractHttpClientPlugin {
     }
 
     @Override
-    protected void onHttpResponse(int statusCode, List<Map.Entry<String, String>> headers, String response, Object context) {
-        if ("login".equals(context)) {
-            JSONObject json = new JSONObject(new JSONTokener(response));
-            logger.debug("Login response received: {}", statusCode);
-            logger.trace(response);
-            nestContext = new LoginContext(json);
-            logger.debug("Login context received: {}", nestContext);
-            setStatus(PluginStatus.running());
-            sendStatusRequest();
-        } else if ("status".equals(context)) {
-            JSONObject json = new JSONObject(new JSONTokener(response));
-            logger.debug("Status response received: {}", statusCode);
-            logger.trace(response);
-            Status status = new Status(json);
-            processStatus(status);
-        } else {
-            logger.debug("Response {} received: {}", context, statusCode);
-            logger.trace(response);
+    public void onHttpResponse(HttpResponse response, Object context) {
+        try {
+            if ("login".equals(context)) {
+                String s = response.getBody();
+                JSONObject json = new JSONObject(new JSONTokener(s));
+                logger.debug("Login response received: {}", response.getStatusCode());
+                logger.trace(s);
+                nestContext = new LoginContext(json);
+                logger.debug("Login context received: {}", nestContext);
+                setStatus(PluginStatus.running());
+                sendStatusRequest();
+            } else if ("status".equals(context)) {
+                String s = response.getBody();
+                JSONObject json = new JSONObject(new JSONTokener(s));
+                logger.debug("Status response received: {}", response.getStatusCode());
+                logger.trace(s);
+                Status status = new Status(json);
+                processStatus(status);
+            } else {
+                logger.debug("Response {} received: {}", context, response.getStatusCode());
+                logger.trace(response.getBody());
+            }
+        } catch (IOException e) {
+            logger.error("Error processing HTTP response", e);
         }
     }
 
     @Override
-    protected void onHttpRequestFailure(Throwable cause, Object context) {
+    public void onHttpRequestFailure(Throwable cause, Object context) {
         logger.error("HTTP request failed", cause);
     }
 }

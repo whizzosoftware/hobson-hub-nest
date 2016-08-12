@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.whizzosoftware.hobson.hub</groupId>
     <artifactId>hobson-hub-nest</artifactId>
-    <version>0.2.1-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
     <packaging>bundle</packaging>
     <name>Nest Thermostat</name>
     <description>Provides the ability to control Nest learning thermostats.</description>
@@ -29,7 +29,7 @@
         <dependency>
             <groupId>com.whizzosoftware.hobson.hub</groupId>
             <artifactId>hobson-hub-api</artifactId>
-            <version>0.9.0</version>
+            <version>0.10.0-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -83,7 +83,7 @@
                 <extensions>true</extensions>
                 <configuration>
                     <instructions>
-                        <Import-Package>org.slf4j,io.netty.*,org.json.*,org.apache.commons.*,com.whizzosoftware.hobson.bootstrap.api.*,com.whizzosoftware.hobson.api.*;version="[0.9.0,0.10)</Import-Package>
+                        <Import-Package>org.slf4j,io.netty.*,org.json.*,org.apache.commons.*,com.whizzosoftware.hobson.bootstrap.api.*,com.whizzosoftware.hobson.api.*;version="[0.10.0,0.11)</Import-Package>
                         <Bundle-Activator>com.whizzosoftware.hobson.api.osgi.activator.HobsonBundleActivator</Bundle-Activator>
                         <Provide-Capability>hobson.plugin=com.whizzosoftware.hobson.nest.NestPlugin</Provide-Capability>
                         <Bundle-Category>hobson-plugin</Bundle-Category>
