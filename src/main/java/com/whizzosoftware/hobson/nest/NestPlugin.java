@@ -1,15 +1,16 @@
-/*******************************************************************************
+/*
+ *******************************************************************************
  * Copyright (c) 2014 Whizzo Software, LLC.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
- *******************************************************************************/
+ *******************************************************************************
+*/
 package com.whizzosoftware.hobson.nest;
 
-import com.whizzosoftware.hobson.api.device.DeviceContext;
 import com.whizzosoftware.hobson.api.device.DeviceNotFoundException;
-import com.whizzosoftware.hobson.api.device.HobsonDevice;
+import com.whizzosoftware.hobson.api.device.proxy.HobsonDeviceProxy;
 import com.whizzosoftware.hobson.api.plugin.PluginStatus;
 import com.whizzosoftware.hobson.api.plugin.http.AbstractHttpClientPlugin;
 import com.whizzosoftware.hobson.api.plugin.http.HttpRequest;
@@ -41,8 +42,8 @@ public class NestPlugin extends AbstractHttpClientPlugin {
 
     private LoginContext nestContext;
 
-    public NestPlugin(String pluginId) {
-        super(pluginId);
+    public NestPlugin(String pluginId, String version, String description) {
+        super(pluginId, version, description);
     }
 
     public String getName() {
@@ -50,17 +51,22 @@ public class NestPlugin extends AbstractHttpClientPlugin {
     }
 
     public void onStartup(PropertyContainer config) {
-        onPluginConfigurationUpdate(config);
+        processConfiguration(config);
     }
 
     public void onShutdown() {}
 
     @Override
     public long getRefreshInterval() {
-        return 300;
+        return 60;
     }
 
+    @Override
     public void onPluginConfigurationUpdate(PropertyContainer config) {
+        processConfiguration(config);
+    }
+
+    private void processConfiguration(PropertyContainer config) {
         // get the username and password from configuration
         String username = (String)config.getPropertyValue("username");
         String password = (String)config.getPropertyValue("password");
@@ -130,7 +136,7 @@ public class NestPlugin extends AbstractHttpClientPlugin {
         }
     }
 
-    public void sendSetTargetTemperatureRequest(String deviceId, Double t) {
+    void sendSetTargetTemperatureRequest(String deviceId, Double t) {
         try {
             URI uri = new URI(nestContext.getTransportUrl() + "/v2/put/shared." + deviceId);
 
@@ -170,7 +176,7 @@ public class NestPlugin extends AbstractHttpClientPlugin {
                     if (sharedDTO != null) {
                         try {
                             try {
-                                HobsonDevice device = getDevice(DeviceContext.create(getContext(), deviceId));
+                                HobsonDeviceProxy device = getDeviceProxy(deviceId);
                                 logger.debug("Updating state of device: " + deviceId);
                                 if (device instanceof NestThermostat) {
                                     ((NestThermostat)device).updateStatus(sharedDTO);
@@ -180,7 +186,7 @@ public class NestPlugin extends AbstractHttpClientPlugin {
                             } catch (DeviceNotFoundException dnfe) {
                                 logger.debug("Creating Nest device: " + deviceId);
                                 NestThermostat nt = new NestThermostat(this, deviceId, sharedDTO, this);
-                                publishDevice(nt);
+                                publishDeviceProxy(nt);
                             }
                         } catch (Exception e) {
                             logger.error("Error updating device with ID: " + deviceId, e);
@@ -200,7 +206,7 @@ public class NestPlugin extends AbstractHttpClientPlugin {
     }
 
     @Override
-    protected TypedProperty[] createSupportedProperties() {
+    protected TypedProperty[] getConfigurationPropertyTypes() {
         return new TypedProperty[] {
             new TypedProperty.Builder("username", "User name", "Your Nest user name (same as web site)", TypedProperty.Type.STRING).build(),
             new TypedProperty.Builder("password", "Password", "Your Nest password (same as web site)", TypedProperty.Type.SECURE_STRING).build()
